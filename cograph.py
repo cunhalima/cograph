@@ -19,7 +19,7 @@ import sqlite3
 
 # Constants
 DB_FILE     = "cograph.db"
-MAX_ORDER   = 8
+MAX_ORDER   = 13
 VF_DELTA    = 1
 INF_GIRTH   = 5
 OP_VERT     = "."
@@ -301,6 +301,7 @@ class CoNode:
         self.connected = True       # null graphs are connected
         self.overfull = False       # null graphs are not overfull
         self.SO = False
+        self.NO = False
         self.deltaSubgraphs = {}
         self.complete = True        # null graphs are complete
         self.cycle = False          # null graphs have no cycles
@@ -341,15 +342,29 @@ class CoNode:
         if self.overfull:
             self.SO = True
             self.ovsub = self
+            if self.numV == self.maxDegree + 1:
+                self.NO = True
             return
         if self.op == OP_UNION:
             self.SO = self.a.SO or self.b.SO
+            if self.a.NO:
+                self.NO = True
+                self.ovsub = self.a.ovsub
+            elif self.b.NO:
+                self.NO = True
+                self.ovsub = self.b.ovsub
+            elif self.SO:
+                if self.a.SO:
+                    self.ovsub = self.a.ovsub
+                else:
+                    self.ovsub = self.b.ovsub
             return
         elif self.op == OP_JOIN:
             for gid, g in self.deltaSubgraphs.items():
                 if g.SO:
                     self.SO = True
                     self.ovsub = g.ovsub
+                    self.NO = self.ovsub.NO
                     break
 
     def calcOverfull(self):
@@ -599,6 +614,7 @@ def writeGraphData():
                     "maxedeg INT, "
                     "ov INT, "
                     "so INT, "
+                    "no INT, "
                     "ovsub INT, "
                     "class INT, "
                     "core INT, "
@@ -612,10 +628,6 @@ def writeGraphData():
         genGraphs(cur)
         updateGraphs(cur)
 
-def b2i(b):
-    if b: return 1
-    return 0
-
 def writeCGData(n, a, b, cur):
     if cur == None:
         return
@@ -628,7 +640,7 @@ def writeCGData(n, a, b, cur):
     if a != None and b != None:
         a = g_cgset[a.string]
         b = g_cgset[b.string]
-        if b.numV > a.numV:
+        if not (a.numV <= b.numV):
             a, b = b, a
     if n.op != None:
         op = OPERATIONS.index(n.op)
@@ -644,12 +656,12 @@ def writeCGData(n, a, b, cur):
         ovsub = n.ovsub.id
     cur.execute("INSERT INTO gr VALUES(" \
         "%d, '%s', %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, "
-        "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)" %
+        "%d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d)" %
         (n.id, n.cmd, n.numV, n.numE, n.star, n.c4, n.complete,
         n.clique, n.combinations, n.complement.id, n.connected, n.cycle,
         n.girth, n.maxDegree, n.minDegree, n.maxEDegree, n.overfull, n.SO,
-        ovsub, n.cpClass, n.core.id, n.semiCore.id, n.height, n.fullHeight,
-        n.numchildren, n.chromNum, n.chromInd))
+        n.NO, ovsub, n.cpClass, n.core.id, n.semiCore.id, n.height,
+        n.fullHeight, n.numchildren, n.chromNum, n.chromInd))
 
 initEncoding()
 writeGraphData()
